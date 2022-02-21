@@ -101,3 +101,9 @@ func x25519Keypair() ([]byte, []byte, error) {
 
 	return pubkey, privkey, err
 }
+
+func shouldExpire(c *cert.NebulaCertificate, early time.Duration) bool {
+	tn := time.Now()
+	te := c.Details.NotAfter.Add(-early)
+	return te.Before(tn) || c.Expired(tn)
+}

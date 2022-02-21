@@ -21,6 +21,7 @@ func resourceCA() *schema.Resource {
 		CreateContext: resourceCACreate,
 		UpdateContext: resourceCAUpdate,
 		DeleteContext: resourceCADelete,
+		CustomizeDiff: resourceCADiff,
 
 		Schema: map[string]*schema.Schema{
 			"name": {
@@ -91,6 +92,16 @@ func resourceCA() *schema.Resource {
 				Type:        schema.TypeString,
 				Computed:    true,
 			},
+			"not_after": {
+				Description: "Certificate not valid after this date.",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
+			"not_before": {
+				Description: "Certificate not valid after this date.",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
 		},
 	}
 }
@@ -101,9 +112,7 @@ func resourceCARead(ctx context.Context, d *schema.ResourceData, meta interface{
 		return diag.Errorf("error loading CA pair: %s", err)
 	}
 
-	tn := time.Now()
-	te := tn.Add(-cast.ToDuration(d.Get("early_renewal_duration")))
-	if te.After(caCert.Details.NotBefore) && caCert.Expired(te) || caCert.Expired(tn) {
+	if shouldExpire(caCert, cast.ToDuration(d.Get("early_renewal_duration"))) {
 		d.SetId("")
 	}
 	return
@@ -145,6 +154,8 @@ func resourceCACreate(ctx context.Context, d *schema.ResourceData, meta interfac
 	}
 	d.Set("cert", string(crt))
 	d.Set("key", string(cert.MarshalEd25519PrivateKey(rawPriv)))
+	d.Set("not_after", nc.Details.NotAfter.Format(time.RFC3339))
+	d.Set("not_before", nc.Details.NotBefore.Format(time.RFC3339))
 	fp, err := nc.Sha256Sum()
 	if err != nil {
 		return diag.Errorf("error while getting certificate fingerprint: %s", err)
@@ -160,5 +171,27 @@ func resourceCADelete(ctx context.Context, d *schema.ResourceData, meta interfac
 }
 
 func resourceCAUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) (dg diag.Diagnostics) {
+	return
+}
+
+func resourceCADiff(ctx context.Context, rd *schema.ResourceDiff, meta interface{}) (err error) {
+	if rd.Id() == "" {
+		return // no state
+	}
+	for _, v := range []string{"name", "groups", "ips", "subnets", "duration"} {
+		if rd.HasChange(v) {
+			return
+		}
+	}
+	if !rd.HasChange("early_renewal_duration") {
+		return
+	}
+
+	_, n := rd.GetChange("early_renewal_duration")
+	exp := cast.ToTime(rd.Get("not_after")).Add(-cast.ToDuration(n))
+	if time.Now().Before(exp) {
+		return
+	}
+	rd.ForceNew("early_renewal_duration")
 	return
 }

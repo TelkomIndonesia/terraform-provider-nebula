@@ -44,5 +44,7 @@ resource "nebula_ca" "awesome" {
 - **cert** (String) The certificate data in PEM format.
 - **fingerprint** (String) The fingerprint of the certificate.
 - **key** (String, Sensitive) The private key data in PEM format.
+- **not_after** (String) Certificate not valid after this date.
+- **not_before** (String) Certificate not valid after this date.
 
 

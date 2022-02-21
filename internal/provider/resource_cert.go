@@ -20,6 +20,7 @@ func resourceCertificate() *schema.Resource {
 		CreateContext: resourceCertificateCreate,
 		UpdateContext: resourceCertificateUpdate,
 		DeleteContext: resourceCertificateDelete,
+		CustomizeDiff: resourceCertificateDiff,
 
 		Schema: map[string]*schema.Schema{
 			"name": {
@@ -73,17 +74,20 @@ func resourceCertificate() *schema.Resource {
 				Description: "The signing CA certificate data in PEM format.",
 				Type:        schema.TypeString,
 				Required:    true,
+				ForceNew:    true,
 			},
 			"ca_key": {
 				Description: "The signing CA private key data in PEM format.",
 				Type:        schema.TypeString,
 				Required:    true,
 				Sensitive:   true,
+				ForceNew:    true,
 			},
 			"public_key": {
 				Description: "The previously generated public key data in PEM format.",
 				Type:        schema.TypeString,
 				Optional:    true,
+				ForceNew:    true,
 			},
 
 			"cert": {
@@ -102,6 +106,16 @@ func resourceCertificate() *schema.Resource {
 				Type:        schema.TypeString,
 				Computed:    true,
 			},
+			"not_after": {
+				Description: "Certificate not valid after this date.",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
+			"not_before": {
+				Description: "Certificate not valid after this date.",
+				Type:        schema.TypeString,
+				Computed:    true,
+			},
 		},
 	}
 }
@@ -117,9 +131,7 @@ func resourceCertificateRead(ctx context.Context, d *schema.ResourceData, meta i
 	if err != nil {
 		return diag.Errorf("error loading certificate pair: %s", err)
 	}
-	tn := time.Now()
-	te := tn.Add(-cast.ToDuration(d.Get("early_renewal_duration")))
-	if te.After(nCert.Details.NotBefore) && nCert.Expired(te) || nCert.Expired(tn) {
+	if shouldExpire(nCert, cast.ToDuration(d.Get("early_renewal_duration"))) {
 		d.SetId("")
 		return
 	}
@@ -205,6 +217,8 @@ func resourceCertificateCreate(ctx context.Context, d *schema.ResourceData, meta
 	if rawPriv != nil {
 		d.Set("key", string(cert.MarshalX25519PrivateKey(rawPriv)))
 	}
+	d.Set("not_after", nc.Details.NotAfter.Format(time.RFC3339))
+	d.Set("not_before", nc.Details.NotBefore.Format(time.RFC3339))
 	fp, err := nc.Sha256Sum()
 	if err != nil {
 		return diag.Errorf("error while getting certificate fingerprint: %s", err)
@@ -218,5 +232,27 @@ func resourceCertificateDelete(ctx context.Context, d *schema.ResourceData, meta
 	return
 }
 func resourceCertificateUpdate(ctx context.Context, d *schema.ResourceData, meta interface{}) (dg diag.Diagnostics) {
+	return
+}
+
+func resourceCertificateDiff(ctx context.Context, rd *schema.ResourceDiff, meta interface{}) (err error) {
+	if rd.Id() == "" {
+		return // no state
+	}
+	for _, v := range []string{"name", "groups", "ip", "subnets", "duration", "ca_cert", "ca_key", "public_key"} {
+		if rd.HasChange(v) {
+			return
+		}
+	}
+	if !rd.HasChange("early_renewal_duration") {
+		return
+	}
+
+	_, n := rd.GetChange("early_renewal_duration")
+	exp := cast.ToTime(rd.Get("not_after")).Add(-cast.ToDuration(n))
+	if time.Now().Before(exp) {
+		return
+	}
+	rd.ForceNew("early_renewal_duration")
 	return
 }
