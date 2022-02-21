@@ -145,8 +145,12 @@ func resourceCACreate(ctx context.Context, d *schema.ResourceData, meta interfac
 	}
 	d.Set("cert", string(crt))
 	d.Set("key", string(cert.MarshalEd25519PrivateKey(rawPriv)))
-	d.Set("fingerprint", string(nc.Signature))
-	d.SetId(string(nc.Signature))
+	fp, err := nc.Sha256Sum()
+	if err != nil {
+		return diag.Errorf("error while getting certificate fingerprint: %s", err)
+	}
+	d.Set("fingerprint", fp)
+	d.SetId(string(fp))
 	return
 }
 
