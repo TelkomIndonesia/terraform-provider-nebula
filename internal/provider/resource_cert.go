@@ -107,14 +107,7 @@ func resourceCertificate() *schema.Resource {
 }
 
 func resourceCertificateRead(ctx context.Context, d *schema.ResourceData, meta interface{}) (dg diag.Diagnostics) {
-	_, caCert, err := toCAPair([]byte(cast.ToString(d.Get("ca_key"))), []byte(cast.ToString(d.Get("ca_cert"))))
-	if err != nil {
-		return diag.Errorf("error loading CA pair: %s", err)
-	}
-	if caCert.Expired(time.Now()) {
-		return diag.Errorf("CA certificate is expired")
-	}
-
+	var err error
 	var nCert *cert.NebulaCertificate
 	if _, ok := d.GetOk("public_key"); ok {
 		nCert, err = toCert([]byte(cast.ToString(d.Get("cert"))))
@@ -124,7 +117,21 @@ func resourceCertificateRead(ctx context.Context, d *schema.ResourceData, meta i
 	if err != nil {
 		return diag.Errorf("error loading certificate pair: %s", err)
 	}
+	tn := time.Now()
+	te := tn.Add(-cast.ToDuration(d.Get("early_renewal_duration")))
+	if te.After(nCert.Details.NotBefore) && nCert.Expired(te) || nCert.Expired(tn) {
+		d.SetId("")
+		return
+	}
 
+	_, caCert, err := toCAPair([]byte(cast.ToString(d.Get("ca_key"))), []byte(cast.ToString(d.Get("ca_cert"))))
+	if err != nil {
+		return diag.Errorf("error loading CA pair: %s", err)
+	}
+	if caCert.Expired(time.Now()) {
+		d.SetId("")
+		return
+	}
 	caPool := cert.NewCAPool()
 	_, err = caPool.AddCACertificate([]byte(cast.ToString(d.Get("ca_cert"))))
 	if err != nil {
@@ -135,11 +142,6 @@ func resourceCertificateRead(ctx context.Context, d *schema.ResourceData, meta i
 		return diag.Errorf("error verifying cert with CA : %s", err)
 	}
 
-	tn := time.Now()
-	te := tn.Add(-cast.ToDuration(d.Get("early_renewal_duration")))
-	if te.After(nCert.Details.NotBefore) && nCert.Expired(te) || nCert.Expired(tn) {
-		d.SetId("")
-	}
 	return
 }
 func resourceCertificateCreate(ctx context.Context, d *schema.ResourceData, meta interface{}) (dg diag.Diagnostics) {
@@ -203,8 +205,12 @@ func resourceCertificateCreate(ctx context.Context, d *schema.ResourceData, meta
 	if rawPriv != nil {
 		d.Set("key", string(cert.MarshalX25519PrivateKey(rawPriv)))
 	}
-	d.Set("fingerprint", string(nc.Signature))
-	d.SetId(string(nc.Signature))
+	fp, err := nc.Sha256Sum()
+	if err != nil {
+		return diag.Errorf("error while getting certificate fingerprint: %s", err)
+	}
+	d.Set("fingerprint", fp)
+	d.SetId(string(fp))
 	return
 }
 func resourceCertificateDelete(ctx context.Context, d *schema.ResourceData, meta interface{}) (dg diag.Diagnostics) {

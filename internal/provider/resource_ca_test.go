@@ -15,6 +15,10 @@ func TestAccResourceCA(t *testing.T) {
 			{
 				Config: testAccResourceCA,
 			},
+			{
+				Config:             testAccResourceCAExpired,
+				ExpectNonEmptyPlan: true,
+			},
 		},
 	})
 }
@@ -31,5 +35,12 @@ resource "nebula_ca" "test1" {
 	subnets = ["192.168.0.1/26"]
 	duration = "24h"
 	early_renewal_duration = "1h"
+}
+`
+
+const testAccResourceCAExpired = `
+resource "nebula_ca" "test" {
+	name = "test"
+	duration="0.000000001s"
 }
 `
