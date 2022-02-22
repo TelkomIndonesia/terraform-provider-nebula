@@ -49,6 +49,7 @@ resource "nebula_certificate" "node2" {
 
 - **ca_cert** (String) The signing CA certificate data in PEM format.
 - **ca_key** (String, Sensitive) The signing CA private key data in PEM format.
+- **ip** (String) IPv4 address and network in CIDR notation to assign the cert.
 - **name** (String) Name of the cert, usually a hostname.
 
 ### Optional
@@ -57,7 +58,6 @@ resource "nebula_certificate" "node2" {
 - **early_renewal_duration** (String) If set, the resource will consider the certificate to have expired the given durations before its actual expiry time. This can be useful to deploy an updated certificate in advance of the expiration of the current certificate. Note however that the old certificate remains valid until its true expiration time, since this resource does not (and cannot) support certificate revocation. Note also that this advance update can only be performed should the Terraform configuration be applied during the early renewal period.
 - **groups** (List of String) List of groups.
 - **id** (String) The ID of this resource.
-- **ip** (String) IPv4 address and network in CIDR notation to assign the cert.
 - **public_key** (String) The previously generated public key data in PEM format.
 - **subnets** (List of String) List of ipv4 address and network in CIDR notation. Subnets this cert can serve for.
 

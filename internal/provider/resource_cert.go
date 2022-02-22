@@ -30,6 +30,13 @@ func resourceCertificate() *schema.Resource {
 				ForceNew:         true,
 				ValidateDiagFunc: validation.ToDiagFunc(validation.StringIsNotEmpty),
 			},
+			"ip": {
+				Description:      "IPv4 address and network in CIDR notation to assign the cert.",
+				Type:             schema.TypeString,
+				ValidateDiagFunc: validation.ToDiagFunc(validation.IsCIDR),
+				Required:         true,
+				ForceNew:         true,
+			},
 			"groups": {
 				Description: "List of groups.",
 				Type:        schema.TypeList,
@@ -39,13 +46,6 @@ func resourceCertificate() *schema.Resource {
 				},
 				Optional: true,
 				ForceNew: true,
-			},
-			"ip": {
-				Description:      "IPv4 address and network in CIDR notation to assign the cert.",
-				Type:             schema.TypeString,
-				ValidateDiagFunc: validation.ToDiagFunc(validation.IsCIDR),
-				Optional:         true,
-				ForceNew:         true,
 			},
 			"subnets": {
 				Description: "List of ipv4 address and network in CIDR notation. Subnets this cert can serve for.",
