@@ -1,0 +1,1 @@
+terraform import [options] nebula_certificate.<resource_name> </path/to/ca.key>:</path/to/ca.cert>:{</path/to/private.key>|</path/to/public.key>}:</path/to/certificate.cert>
