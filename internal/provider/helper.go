@@ -107,3 +107,10 @@ func shouldExpire(c *cert.NebulaCertificate, early time.Duration) bool {
 	te := c.Details.NotAfter.Add(-early)
 	return te.Before(tn) || c.Expired(tn)
 }
+
+func ipsToString(ips []*net.IPNet) (s []string) {
+	for _, ip := range ips {
+		s = append(s, ip.String())
+	}
+	return
+}

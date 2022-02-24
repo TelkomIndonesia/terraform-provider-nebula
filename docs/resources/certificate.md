@@ -69,4 +69,10 @@ resource "nebula_certificate" "node2" {
 - **not_after** (String) Certificate not valid after this date.
 - **not_before** (String) Certificate not valid after this date.
 
+## Import
 
+Import is supported using the following syntax:
+
+```shell
+terraform import [options] nebula_certificate.<resource_name> </path/to/ca.key>:</path/to/ca.cert>:{</path/to/private.key>|</path/to/public.key>}:</path/to/certificate.cert>
+```

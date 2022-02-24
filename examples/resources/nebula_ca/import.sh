@@ -1,0 +1,1 @@
+terraform import [options] nebula_ca.<resource_name> </path/to/ca.key>:</path/to/ca.cert>

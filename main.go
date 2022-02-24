@@ -26,6 +26,8 @@ var (
 
 	// goreleaser can also pass the specific commit if you want
 	// commit  string = ""
+
+	Description string = "test"
 )
 
 func main() {

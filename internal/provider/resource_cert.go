@@ -2,7 +2,10 @@ package provider
 
 import (
 	"context"
+	"fmt"
+	"io/ioutil"
 	"net"
+	"path/filepath"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -20,6 +23,9 @@ func resourceCertificate() *schema.Resource {
 		CreateContext: resourceCertificateCreate,
 		UpdateContext: resourceCertificateUpdate,
 		DeleteContext: resourceCertificateDelete,
+		Importer: &schema.ResourceImporter{
+			StateContext: resourceCertificateImport,
+		},
 		CustomizeDiff: resourceCertificateDiff,
 
 		Schema: map[string]*schema.Schema{
@@ -255,4 +261,80 @@ func resourceCertificateDiff(ctx context.Context, rd *schema.ResourceDiff, meta 
 	}
 	rd.ForceNew("early_renewal_duration")
 	return
+}
+
+func resourceCertificateImport(ctx context.Context, d *schema.ResourceData, m interface{}) ([]*schema.ResourceData, error) {
+	paths := filepath.SplitList(d.Id())
+	if len(paths) < 4 {
+		return nil, fmt.Errorf("Argument must be in the form of <path-to-ca-key-file>:<path-to-ca-cert-file>:{<path-to-private-key-file>|<path-to-public-key-file>}:<path-to-certificatefile>. Got %s", d.Id())
+	}
+	rawCAKey, err := ioutil.ReadFile(paths[0])
+	if err != nil {
+		return nil, fmt.Errorf("error while reading ca-key: %s", err)
+	}
+	rawCACert, err := ioutil.ReadFile(paths[1])
+	if err != nil {
+		return nil, fmt.Errorf("error while reading ca-crt: %s", err)
+	}
+	_, caCert, err := toCAPair(rawCAKey, rawCACert)
+	if err != nil {
+		return nil, fmt.Errorf("error loading CA pair: %s", err)
+	}
+	if caCert.Expired(time.Now()) {
+		return nil, fmt.Errorf("ca certificate is expired")
+	}
+
+	rawCert, err := ioutil.ReadFile(paths[3])
+	if err != nil {
+		return nil, fmt.Errorf("error while reading certificate: %s", err)
+	}
+	nCert, err := toCert(rawCert)
+	if err != nil {
+		return nil, fmt.Errorf("error loading certificate: %s", err)
+	}
+	if nCert.Expired(time.Now()) {
+		return nil, fmt.Errorf("ca certificate is expired")
+	}
+	caPool := cert.NewCAPool()
+	_, err = caPool.AddCACertificate(rawCACert)
+	if err != nil {
+		return nil, fmt.Errorf("error while adding CA cert to pool: %s", err)
+	}
+	good, err := nCert.Verify(time.Now(), caPool)
+	if !good {
+		return nil, fmt.Errorf("error verifying cert with CA : %s", err)
+	}
+
+	rawKey, err := ioutil.ReadFile(paths[2])
+	if err != nil {
+		return nil, fmt.Errorf("error while reading private or public key: %s", err)
+	}
+	_, _, errPri := cert.UnmarshalX25519PrivateKey(rawKey)
+	_, _, errPub := cert.UnmarshalX25519PublicKey(rawKey)
+	if errPri != nil && errPub != nil {
+		return nil, fmt.Errorf("error while loading private or public key: %s %s", errPri, errPub)
+	}
+
+	fp, err := nCert.Sha256Sum()
+	if err != nil {
+		return nil, fmt.Errorf("error while getting certificate fingerprint: %s", err)
+	}
+	d.Set("name", nCert.Details.Name)
+	d.Set("groups", nCert.Details.Groups)
+	d.Set("ip", nCert.Details.Ips[0].String())
+	d.Set("subnets", ipsToString(nCert.Details.Subnets))
+	d.Set("cert", string(rawCert))
+	if errPri == nil {
+		d.Set("key", string(rawKey))
+	} else {
+		d.Set("public_key", string(rawKey))
+	}
+	d.Set("ca_cert", string(rawCACert))
+	d.Set("ca_key", string(rawCAKey))
+	d.Set("not_after", nCert.Details.NotAfter.Format(time.RFC3339))
+	d.Set("not_before", nCert.Details.NotBefore.Format(time.RFC3339))
+	d.Set("fingerprint", fp)
+	d.SetId(fp)
+
+	return []*schema.ResourceData{d}, nil
 }

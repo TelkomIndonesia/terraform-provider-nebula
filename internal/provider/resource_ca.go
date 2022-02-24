@@ -4,6 +4,9 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"fmt"
+	"io/ioutil"
+	"path/filepath"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
@@ -21,6 +24,9 @@ func resourceCA() *schema.Resource {
 		CreateContext: resourceCACreate,
 		UpdateContext: resourceCAUpdate,
 		DeleteContext: resourceCADelete,
+		Importer: &schema.ResourceImporter{
+			StateContext: resourceCAImport,
+		},
 		CustomizeDiff: resourceCADiff,
 
 		Schema: map[string]*schema.Schema{
@@ -194,4 +200,43 @@ func resourceCADiff(ctx context.Context, rd *schema.ResourceDiff, meta interface
 	}
 	rd.ForceNew("early_renewal_duration")
 	return
+}
+
+func resourceCAImport(ctx context.Context, d *schema.ResourceData, m interface{}) ([]*schema.ResourceData, error) {
+	paths := filepath.SplitList(d.Id())
+	if len(paths) != 2 {
+		return nil, fmt.Errorf("Argument must be in the form of <path-to-ca-key-file>:<path-to-ca-cert-file>. Got %s", d.Id())
+	}
+	rawCAKey, err := ioutil.ReadFile(paths[0])
+	if err != nil {
+		return nil, fmt.Errorf("error while reading ca-key: %s", err)
+	}
+	rawCACert, err := ioutil.ReadFile(paths[1])
+	if err != nil {
+		return nil, fmt.Errorf("error while reading ca-crt: %s", err)
+	}
+	_, caCert, err := toCAPair(rawCAKey, rawCACert)
+	if err != nil {
+		return nil, fmt.Errorf("error loading CA pair: %s", err)
+	}
+	if caCert.Expired(time.Now()) {
+		return nil, fmt.Errorf("ca certificate is expired")
+	}
+
+	fp, err := caCert.Sha256Sum()
+	if err != nil {
+		return nil, fmt.Errorf("error while getting certificate fingerprint: %s", err)
+	}
+	d.Set("name", caCert.Details.Name)
+	d.Set("groups", caCert.Details.Groups)
+	d.Set("ips", ipsToString(caCert.Details.Ips))
+	d.Set("subnets", ipsToString(caCert.Details.Subnets))
+	d.Set("cert", string(rawCACert))
+	d.Set("key", string(rawCAKey))
+	d.Set("not_after", caCert.Details.NotAfter.Format(time.RFC3339))
+	d.Set("not_before", caCert.Details.NotBefore.Format(time.RFC3339))
+	d.Set("fingerprint", fp)
+	d.SetId(fp)
+
+	return []*schema.ResourceData{d}, nil
 }
