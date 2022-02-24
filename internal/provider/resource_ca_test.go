@@ -8,6 +8,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
+	"github.com/spf13/cast"
 )
 
 func TestAccResourceCA(t *testing.T) {
@@ -125,10 +126,10 @@ func TestAccResourceCAImport(t *testing.T) {
 					if v := state.Attributes["cert"]; v != string(rawCACert) {
 						return fmt.Errorf("invalid certificate, got %s", v)
 					}
-					if v := state.Attributes["not_after"]; v != "2023-02-24T13:47:48+07:00" {
+					if v := cast.ToTime(state.Attributes["not_after"]); !v.Equal(cast.ToTime("2023-02-24T13:47:48+07:00")) {
 						return fmt.Errorf("invalid not_after, got %s", v)
 					}
-					if v := state.Attributes["not_before"]; v != "2022-02-24T13:47:48+07:00" {
+					if v := cast.ToTime(state.Attributes["not_before"]); !v.Equal(cast.ToTime("2022-02-24T13:47:48+07:00")) {
 						return fmt.Errorf("invalid not_before, got %s", v)
 					}
 					return nil
