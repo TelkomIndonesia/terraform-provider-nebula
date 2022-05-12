@@ -8,7 +8,6 @@ require (
 	github.com/hashicorp/terraform-plugin-log v0.2.1 // indirect
 	github.com/hashicorp/terraform-plugin-sdk/v2 v2.10.1
 	github.com/slackhq/nebula v1.5.2
-	github.com/spf13/cast v1.4.1
-	github.com/stretchr/testify v1.7.0 // indirect
+	github.com/spf13/cast v1.5.0
 	golang.org/x/crypto v0.0.0-20211202192323-5770296d904e
 )
